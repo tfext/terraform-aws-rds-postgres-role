@@ -22,10 +22,22 @@ variable "database" {
   description = "The database instance (identifier, such as ppta-stg) and its outputs from the terraform-aws-rds module"
 }
 
-variable "connection" {
-  type        = object({ host = string, port = number })
+variable "tunnel" {
+  type = object({
+    autoscaling_group = string
+  })
   default     = null
-  description = "Where the script reaches the database, when it isn't database.host: for example the local end of an SSM tunnel"
+  description = "Reach a private database through an SSM port-forwarding session, opened by the script for each run through an in-service instance of this autoscaling group"
+}
+
+variable "aws" {
+  type = object({
+    profile  = optional(string)
+    role_arn = optional(string)
+  })
+  default     = {}
+  nullable    = false
+  description = "Credentials for the script's AWS CLI calls (the master secret, and the tunnel): a profile, then a role assumed from it. Usually the same as the provider's. Unset means the environment's credentials"
 }
 
 variable "read" {
@@ -67,11 +79,11 @@ variable "schema_owner" {
 variable "owned_by" {
   type        = string
   default     = null
-  description = "The schema role whose new tables \"*\" grants cover. Required when read or write is [\"*\"]"
+  description = "The schema role that owns the tables in read and write. The grants are made signed in as it, with IAM. Required when read or write is set"
 
   validation {
-    condition     = var.owned_by != null || !(contains(var.read, "*") || contains(var.write, "*"))
-    error_message = "owned_by is required when read or write is [\"*\"]."
+    condition     = var.owned_by != null || (length(var.read) == 0 && length(var.write) == 0)
+    error_message = "owned_by is required when read or write is set."
   }
 }
 
