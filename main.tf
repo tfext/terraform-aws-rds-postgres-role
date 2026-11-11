@@ -2,11 +2,11 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
 locals {
-  config = {
+  # What the role is. A change here re-runs the grants
+  role = {
     name         = var.name
     region       = data.aws_region.current.region
     database     = var.database
-    connection   = var.connection
     read         = var.read
     write        = var.write
     schema_owner = var.schema_owner
@@ -14,6 +14,9 @@ locals {
     extensions   = var.extensions
     iam          = var.iam
   }
+  # How the script reaches the database. Not a trigger, so running from
+  # elsewhere (another profile, or CI) doesn't re-run the grants
+  config      = merge(local.role, { tunnel = var.tunnel, aws = var.aws })
   script_path = "${path.module}/role.py"
 }
 
@@ -41,9 +44,9 @@ resource "terraform_data" "role" {
 }
 
 # Creates the role if needed and applies its extensions and grants. Re-runs
-# whenever the configuration changes; every step is idempotent.
+# whenever the role's definition changes; every step is idempotent.
 resource "terraform_data" "grants" {
-  triggers_replace = { config = jsonencode(local.config) }
+  triggers_replace = { role = jsonencode(local.role) }
 
   provisioner "local-exec" {
     command     = "printf '%s' \"$INPUT\" | python3 '${local.script_path}' create"
